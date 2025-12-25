@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bc9bfa2bd7966f848abd7c69042a8069, type: 3}
   m_Name: KartConfig
   m_EditorClassIdentifier: Assembly-CSharp::KartConfig
-  mass: 100
-  frictionCoefficient: 1.1
+  mass: 150
+  frictionCoefficient: 1.28
   lateralStiffness: 110
-  rollingResistance: 0.07
+  rollingResistance: 0.43
   maxSteerAngle: 30
   engineTorqueCurve:
     serializedVersion: 2
