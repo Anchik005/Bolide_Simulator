@@ -1,81 +1,80 @@
-using System;
 using UnityEngine;
 
 public class AeroController : MonoBehaviour
 {
-    [Header("Aero Drag")]
+    // Аэродинамическое сопротивление
     [SerializeField] private float airDensity = 1.225f;
-    [SerializeField] private float dragCoefficient = 0.9f; // Cx
-    [SerializeField] private float frontalArea = 0.6f; // A (м²)
+    [SerializeField] private float dragCoefficient = 0.9f;
+    [SerializeField] private float crossSection = 0.6f;
 
-    [Header("Rear Wing")]
-    [SerializeField] private Transform rearWing;
-    [SerializeField] private float wingArea = 0.4f; // м²
-    [SerializeField] private float liftCoefficientSlope = 0.05f; // k
-    [SerializeField] private float wingAngleDeg = 10f; // угол атаки
+    // Заднее антикрыло
+    [SerializeField] private Transform wingPosition;
+    [SerializeField] private float wingSize = 0.4f;
+    [SerializeField] private float liftCoefficient = 0.05f;
+    [SerializeField] private float attackAngle = 10f;
 
-    [Header("Ground Effect")]
-    [SerializeField] private float groundEffectStrength = 300f;
-    [SerializeField] private float groundRayLength = 1.0f;
+    // Эффект земли
+    [SerializeField] private float groundEffect = 300f;
+    [SerializeField] private float groundCheckDistance = 1.0f;
 
-    private Rigidbody _rb;
+    private Rigidbody body;
 
     private void Awake()
     {
-        _rb = GetComponent<Rigidbody>();
+        body = GetComponent<Rigidbody>();
     }
 
     private void FixedUpdate()
     {
-        ApplyDragInternal();
-        ApplyWingDownforceInternal();
-        ApplyGroundEffectInternal();
+        ApplyDrag();
+        ApplyWingForce();
+        ApplyGroundEffect();
     }
 
-    private void ApplyDragInternal()
+    private void ApplyDrag()
     {
-        Vector3 velocity = _rb.linearVelocity;
+        Vector3 velocity = body.linearVelocity;
         float speed = velocity.magnitude;
 
         if (speed < 0.01f)
             return;
 
-        float dragForce = 0.5f * airDensity * dragCoefficient * frontalArea * speed * speed;
-        Vector3 dragVector = -velocity.normalized * dragForce;
+        float drag = 0.5f * airDensity * dragCoefficient * crossSection * speed * speed;
+        Vector3 dragForce = -velocity.normalized * drag;
 
-        _rb.AddForce(dragVector, ForceMode.Force);
+        body.AddForce(dragForce, ForceMode.Force);
     }
 
-    private void ApplyWingDownforceInternal()
+    private void ApplyWingForce()
     {
-        if (rearWing == null)
+        if (wingPosition == null)
             return;
 
-        float speed = _rb.linearVelocity.magnitude;
+        float speed = body.linearVelocity.magnitude;
         if (speed < 0.01f)
             return;
 
-        float alphaRad = wingAngleDeg * Mathf.Deg2Rad;
-        float cl = liftCoefficientSlope * alphaRad;
+        float angleRad = attackAngle * Mathf.Deg2Rad;
+        float cl = liftCoefficient * angleRad;
 
-        float downforce = 0.5f * airDensity * cl * wingArea * speed * speed;
+        float downforce = 0.5f * airDensity * cl * wingSize * speed * speed;
         Vector3 downforceVector = -transform.up * downforce;
 
-        _rb.AddForceAtPosition(downforceVector, rearWing.position, ForceMode.Force);
+        body.AddForceAtPosition(downforceVector, wingPosition.position, ForceMode.Force);
     }
 
-    private void ApplyGroundEffectInternal()
+    private void ApplyGroundEffect()
     {
-        if (!Physics.Raycast(transform.position, -transform.up, out RaycastHit hit, groundRayLength))
+        if (!Physics.Raycast(transform.position, -transform.up, out RaycastHit hit, groundCheckDistance))
             return;
 
-        float h = hit.distance; // высота над землёй
-        if (h < 0.01f)
-            h = 0.01f;
+        float height = hit.distance;
+        if (height < 0.01f)
+            height = 0.01f;
 
-        float geForce = groundEffectStrength / h;
-        Vector3 geVector = -transform.up * geForce;
+        float effectForce = groundEffect / height;
+        Vector3 effectVector = -transform.up * effectForce;
 
-        _rb.AddForce(geVector, ForceMode.Force);
+        body.AddForce(effectVector, ForceMode.Force);
     }
 }

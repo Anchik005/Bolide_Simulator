@@ -4,275 +4,270 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(Rigidbody))]
 public class KartController : MonoBehaviour
 {
-    [Header("Import parametrs")]
-    [SerializeField] private bool _import = false;
-    [SerializeField] private KartConfig _kartConfig;
+    // Импорт параметров из конфигурации
+    [SerializeField] private bool useConfigFile = false;
+    [SerializeField] private KartConfig kartSettings;
 
-    [Header("Wheel attachment points")]
-    [SerializeField] private Transform _frontLeftWheel;
-    [SerializeField] private Transform _frontRightWheel;
-    [SerializeField] private Transform _rearLeftWheel;
-    [SerializeField] private Transform _rearRightWheel;
+    // Точки крепления колес
+    [SerializeField] private Transform frontLeft;
+    [SerializeField] private Transform frontRight;
+    [SerializeField] private Transform rearLeft;
+    [SerializeField] private Transform rearRight;
 
-    [Header("Input (New Input System)")]
-    [SerializeField] private InputActionAsset _playerInput;
+    // Система ввода
+    [SerializeField] private InputActionAsset inputActions;
 
-    [Header("Weight distribution")]
-    [SerializeField, Range(0, 1)] private float _frontAxisShare = 0.5f;
+    // Распределение веса
+    [SerializeField, Range(0, 1)] private float frontWeightRatio = 0.5f;
 
-    [Header("Engine & drivetrain")]
-    [SerializeField] private EngineController _engine;
-    [SerializeField] private float _gearRatio = 8f;
-    [SerializeField] private float _drivetrainEfficiency = 0.9f;
+    // Двигатель и трансмиссия
+    [SerializeField] private EngineController motor;
+    [SerializeField] private float gearMultiplier = 8f;
+    [SerializeField] private float transmissionEfficiency = 0.9f;
 
-    [Header("Handbrake")]
-    [SerializeField] private KeyCode handbrakeKey = KeyCode.Space;
-    [SerializeField] private float handbrakeBrakeForce = 600f;
+    // Ручной тормоз
+    [SerializeField] private KeyCode handbrakeButton = KeyCode.Space;
+    [SerializeField] private float handbrakeStrength = 600f;
 
-    private InputAction _moveAction;
+    // Компоненты
+    private InputAction movementAction;
+    private Rigidbody body;
 
-    private float _throttleInput;
-    private float _steepInput;
-    private bool _handbrakePressed;
+    // Входные данные
+    private float throttleValue;
+    private float steerValue;
+    private bool handbrakeActive;
 
-    private float _frontLeftNormalForce;
-    private float _frontRightNormalForce;
-    private float _rearLeftNormalForce;
-    private float _rearRightNormalForce;
+    // Силы на колесах
+    private float flLoad;
+    private float frLoad;
+    private float rlLoad;
+    private float rrLoad;
 
-    private Rigidbody _rigidbody;
-    private Vector3 g = Physics.gravity;
+    // Параметры
+    private Vector3 gravity = Physics.gravity;
+    [SerializeField] private float motorTorque = 400f;
+    [SerializeField] private float tireRadius = 0.3f;
+    [SerializeField] private float velocityLimit = 20;
+    [SerializeField] private float maxTurnAngle = 60f;
 
-    [SerializeField] private float engineTorque = 400f;
-    [SerializeField] private float wheelRadius = 0.3f;
-    [SerializeField] private float maxSpeed = 20;
+    // Параметры шин
+    [SerializeField] private float gripCoefficient = 1f;
+    [SerializeField] private float sideStiffness = 80f;
+    [SerializeField] private float rollingDrag = 0.07f;
 
-    [Header("Steering")]
-    [SerializeField] private float maxSteeringAngle = 60f;
+    // Вращение колес
+    private Quaternion initialFLRot;
+    private Quaternion initialFRRot;
 
-    private Quaternion frontLeftInitialRot;
-    private Quaternion frontRightInitialRot;
+    // Расчетные величины
+    private float forwardVelocity = 0f;
+    private float longitudinalForce = 0f;
+    private float lateralForce = 0f;
 
-    [Header("Tyre friction")]
-    [SerializeField] private float frictionCoefficient = 1f;
-    [SerializeField] private float lateralStiffnes = 80f;
-    [SerializeField] private float rollingResistance = 0.07f;
-
-    private float speedAlongForward = 0f;
-    private float Fx = 0f;
-    private float Fy = 0f;
-
-    private void Awake()
+    private void Start()
     {
-        _playerInput.Enable();
-        _rigidbody = GetComponent<Rigidbody>();
+        inputActions.Enable();
+        body = GetComponent<Rigidbody>();
 
-        var map = _playerInput.FindActionMap("Kart");
-        _moveAction = map.FindAction("Move");
+        var actionMap = inputActions.FindActionMap("Kart");
+        movementAction = actionMap.FindAction("Move");
 
-        if (_import)
-            Initialize();
+        if (useConfigFile)
+            LoadConfiguration();
 
-        frontLeftInitialRot = _frontLeftWheel.localRotation;
-        frontRightInitialRot = _frontRightWheel.localRotation;
+        initialFLRot = frontLeft.localRotation;
+        initialFRRot = frontRight.localRotation;
 
-        ComputeStaticWheelLoad();
+        CalculateWheelLoads();
     }
 
-    private void Initialize()
+    private void LoadConfiguration()
     {
-        if (_kartConfig != null)
+        if (kartSettings != null)
         {
-            _rigidbody.mass = _kartConfig.mass;
-            frictionCoefficient = _kartConfig.frictionCoefficient;
-            rollingResistance = _kartConfig.rollingResistance;
-            maxSteeringAngle = _kartConfig.maxSteerAngle;
-            _gearRatio = _kartConfig.gearRatio;
-            wheelRadius = _kartConfig.wheelRadius;
-            lateralStiffnes = _kartConfig.lateralStiffness;
+            body.mass = kartSettings.mass;
+            gripCoefficient = kartSettings.frictionCoefficient;
+            rollingDrag = kartSettings.rollingResistance;
+            maxTurnAngle = kartSettings.maxSteerAngle;
+            gearMultiplier = kartSettings.gearRatio;
+            tireRadius = kartSettings.wheelRadius;
+            sideStiffness = kartSettings.lateralStiffness;
         }
     }
 
     private void OnDisable()
     {
-        _playerInput.Disable();
+        inputActions.Disable();
     }
 
     private void Update()
     {
-        PollInput();
-        ApplyVisualSteer();
+        ReadInput();
+        UpdateWheelVisuals();
     }
 
-    private void PollInput()
+    private void ReadInput()
     {
-        Vector2 move = _moveAction.ReadValue<Vector2>();
+        Vector2 input = movementAction.ReadValue<Vector2>();
 
-        _steepInput = Mathf.Clamp(move.x, -1, 1);
-        _throttleInput = Mathf.Clamp(move.y, -1, 1);
+        steerValue = Mathf.Clamp(input.x, -1, 1);
+        throttleValue = Mathf.Clamp(input.y, -1, 1);
 
-        // Ручник
-        _handbrakePressed = Input.GetKey(handbrakeKey);
+        handbrakeActive = Input.GetKey(handbrakeButton);
     }
 
-    private void ApplyVisualSteer()
+    private void UpdateWheelVisuals()
     {
-        float steerAngle = maxSteeringAngle * _steepInput;
-        Quaternion steerRot = Quaternion.Euler(0, steerAngle, 0);
+        float angle = maxTurnAngle * steerValue;
+        Quaternion rotation = Quaternion.Euler(0, angle, 0);
 
-        _frontLeftWheel.localRotation = frontLeftInitialRot * steerRot;
-        _frontRightWheel.localRotation = frontRightInitialRot * steerRot;
+        frontLeft.localRotation = initialFLRot * rotation;
+        frontRight.localRotation = initialFRRot * rotation;
     }
 
-    private void ComputeStaticWheelLoad()
+    private void CalculateWheelLoads()
     {
-        float mass = _rigidbody.mass;
-        float totalWeight = mass * Mathf.Abs(g.y);
+        float weight = body.mass * Mathf.Abs(gravity.y);
+        float frontWeight = weight * frontWeightRatio;
+        float rearWeight = weight - frontWeight;
 
-        float frontWeight = totalWeight * _frontAxisShare;
-        float rearWeight = totalWeight - frontWeight;
+        frLoad = frontWeight * 0.5f;
+        flLoad = frLoad;
 
-        _frontRightNormalForce = frontWeight * 0.5f;
-        _frontLeftNormalForce = _frontRightNormalForce;
-
-        _rearRightNormalForce = rearWeight * 0.5f;
-        _rearLeftNormalForce = _rearRightNormalForce;
+        rrLoad = rearWeight * 0.5f;
+        rlLoad = rrLoad;
     }
 
     private void FixedUpdate()
     {
-        ApplyEngineForces();
+        ApplyMotorForce();
 
-        ApplyWheelForce(_frontLeftWheel, _frontLeftNormalForce, isSteer: true, isDrive: false);
-        ApplyWheelForce(_frontRightWheel, _frontRightNormalForce, isSteer: true, isDrive: false);
-        ApplyWheelForce(_rearLeftWheel, _rearLeftNormalForce, isSteer: false, isDrive: true);
-        ApplyWheelForce(_rearRightWheel, _rearRightNormalForce, isSteer: false, isDrive: true);
+        ProcessWheel(frontLeft, flLoad, true, false);
+        ProcessWheel(frontRight, frLoad, true, false);
+        ProcessWheel(rearLeft, rlLoad, false, true);
+        ProcessWheel(rearRight, rrLoad, false, true);
     }
 
-    private void ApplyEngineForces()
+    private void ApplyMotorForce()
     {
-        Vector3 fwd = transform.forward;
+        Vector3 forward = transform.forward;
 
-        float along = Vector3.Dot(_rigidbody.linearVelocity, fwd);
-        if (_throttleInput > 0 && along > maxSpeed)
+        float forwardSpeed = Vector3.Dot(body.linearVelocity, forward);
+        if (throttleValue > 0 && forwardSpeed > velocityLimit)
             return;
 
-        float driveTorque = engineTorque * _throttleInput;
-        float driveForcePerWheel = driveTorque / wheelRadius / 2f;
+        float torque = motorTorque * throttleValue;
+        float forcePerWheel = torque / tireRadius / 2f;
 
-        Vector3 rearForce = fwd * driveForcePerWheel;
-        _rigidbody.AddForceAtPosition(rearForce, _rearLeftWheel.position, ForceMode.Force);
-        _rigidbody.AddForceAtPosition(rearForce, _rearRightWheel.position, ForceMode.Force);
+        Vector3 rearForce = forward * forcePerWheel;
+        body.AddForceAtPosition(rearForce, rearLeft.position, ForceMode.Force);
+        body.AddForceAtPosition(rearForce, rearRight.position, ForceMode.Force);
     }
 
-    private void ApplyWheelForce(Transform wheel, float normalForce, bool isSteer, bool isDrive)
+    private void ProcessWheel(Transform wheel, float load, bool isSteering, bool isDriving)
     {
-        Vector3 wheelPos = wheel.position;
-        Vector3 wheelFwd = wheel.forward;
-        Vector3 wheelRight = wheel.right;
+        Vector3 position = wheel.position;
+        Vector3 forward = wheel.forward;
+        Vector3 right = wheel.right;
 
-        Vector3 pointVel = _rigidbody.GetPointVelocity(wheelPos);
+        Vector3 velocityAtPoint = body.GetPointVelocity(position);
 
-        float vlong = Vector3.Dot(pointVel, wheelFwd);
-        float vlat = Vector3.Dot(pointVel, wheelRight);
+        float forwardVel = Vector3.Dot(velocityAtPoint, forward);
+        float sideVel = Vector3.Dot(velocityAtPoint, right);
 
-        Fx = 0f;
-        Fy = 0f;
+        longitudinalForce = 0f;
+        lateralForce = 0f;
 
-        if (isDrive)
+        if (isDriving)
         {
-            speedAlongForward = Vector3.Dot(_rigidbody.linearVelocity, transform.forward);
+            forwardVelocity = Vector3.Dot(body.linearVelocity, transform.forward);
 
-            float engineTorqueOut = _engine.Simulate(_throttleInput, speedAlongForward, Time.fixedDeltaTime);
-            float totalWheelTorque = engineTorqueOut * _gearRatio * _drivetrainEfficiency;
+            float engineOutput = motor.Simulate(throttleValue, forwardVelocity, Time.fixedDeltaTime);
+            float totalWheelTorque = engineOutput * gearMultiplier * transmissionEfficiency;
 
             float wheelTorque = totalWheelTorque * 0.5f;
-            Fx += wheelTorque / wheelRadius;
+            longitudinalForce += wheelTorque / tireRadius;
 
-            if (_handbrakePressed)
+            if (handbrakeActive)
             {
-                float brakeDir = vlong > 0 ? -1f : (vlong < 0 ? 1f : -1f);
-                Fx += brakeDir * handbrakeBrakeForce;
+                float brakeDirection = forwardVel > 0 ? -1f : (forwardVel < 0 ? 1f : -1f);
+                longitudinalForce += brakeDirection * handbrakeStrength;
             }
         }
-        else if (isSteer)
+        else if (isSteering)
         {
-            float rooling = -rollingResistance * vlong;
-            Fx += rooling;
+            float rollingDragForce = -rollingDrag * forwardVel;
+            longitudinalForce += rollingDragForce;
         }
 
-        float fyRaw = -lateralStiffnes * vlat;
-        Fy += fyRaw;
+        float rawSideForce = -sideStiffness * sideVel;
+        lateralForce += rawSideForce;
 
-        float frictionlimit = frictionCoefficient * normalForce;
-        float forceLenght = Mathf.Sqrt(Fx * Fx + Fy * Fy);
+        float maxFriction = gripCoefficient * load;
+        float totalForce = Mathf.Sqrt(longitudinalForce * longitudinalForce + lateralForce * lateralForce);
 
-        if (forceLenght > frictionlimit)
+        if (totalForce > maxFriction)
         {
-            float scale = frictionlimit / forceLenght;
-
-            // В исходнике было Fy += scale; Fx += scale; — оставлено как есть.
-            Fy += scale;
-            Fx += scale;
+            float reduction = maxFriction / totalForce;
+            lateralForce += reduction;
+            longitudinalForce += reduction;
         }
 
-        Vector3 force = wheelFwd * Fx + wheelRight * Fy;
-        _rigidbody.AddForceAtPosition(force, wheel.position, ForceMode.Force);
+        Vector3 finalForce = forward * longitudinalForce + right * lateralForce;
+        body.AddForceAtPosition(finalForce, wheel.position, ForceMode.Force);
     }
 
-    // Телеметрия: та же информация, но по-другому сверстана.
+    // Панель диагностики
     private void OnGUI()
     {
-        var panel = new Rect(12f, 12f, 520f, 260f);
+        Rect panel = new Rect(20f, 20f, 500f, 240f);
 
-        // фон-плашка
-        Color oldColor = GUI.color;
-        GUI.color = new Color(0f, 0f, 0f, 0.55f);
-        GUI.Box(panel, GUIContent.none);
-        GUI.color = oldColor;
+        GUI.color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
+        GUI.Box(panel, "");
+        GUI.color = Color.white;
 
-        var titleStyle = new GUIStyle(GUI.skin.label)
+        GUIStyle headerStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 20,
+            fontSize = 18,
             fontStyle = FontStyle.Bold,
+            normal = { textColor = Color.yellow }
+        };
+
+        GUIStyle textStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 14,
             normal = { textColor = Color.white }
         };
 
-        var rowStyle = new GUIStyle(GUI.skin.label)
+        float x = panel.x + 15f;
+        float y = panel.y + 15f;
+        float width = panel.width - 30f;
+
+        GUI.Label(new Rect(x, y, width, 25f), "Телеметрия машины", headerStyle);
+        y += 30f;
+
+        GUI.Label(new Rect(x, y, width, 20f), $"Скорость: {forwardVelocity:0.0} м/с ({(forwardVelocity * 3.6f):0.0} км/ч)", textStyle);
+        y += 22f;
+        GUI.Label(new Rect(x, y, width, 20f), $"Обороты: {motor.CurrentRpm:0}", textStyle);
+        y += 22f;
+        GUI.Label(new Rect(x, y, width, 20f), $"Крутящий момент: {motor.CurrentTorque:0.0} Н·м", textStyle);
+        y += 28f;
+
+        GUI.Label(new Rect(x, y, width, 20f), "Силы на колесах:", textStyle);
+        y += 22f;
+        GUI.Label(new Rect(x, y, width, 20f), $"Продольная: {longitudinalForce:0.0} Н", textStyle);
+        y += 22f;
+        GUI.Label(new Rect(x, y, width, 20f), $"Боковая: {lateralForce:0.0} Н", textStyle);
+
+        if (handbrakeActive)
         {
-            fontSize = 16,
-            normal = { textColor = Color.white }
-        };
-
-        float x = panel.x + 14f;
-        float y = panel.y + 12f;
-        float w = panel.width - 28f;
-
-        GUI.Label(new Rect(x, y, w, 24f), "KART TELEMETRY", titleStyle);
-        y += 34f;
-
-        string speedLine = $"Speed   {speedAlongForward:0.0} m/s   ({(speedAlongForward * 3.6f):0.0} km/h)";
-        string rpmLine = $"RPM     {_engine.CurrentRpm:0}";
-        string tqLine = $"Torque  {_engine.CurrentTorque:0.0} N·m";
-        string fxLine = $"Fx      {Fx:0.0} N";
-        string fyLine = $"Fy      {Fy:0.0} N";
-
-        GUI.Label(new Rect(x, y, w, 20f), speedLine, rowStyle); y += 22f;
-        GUI.Label(new Rect(x, y, w, 20f), rpmLine, rowStyle); y += 22f;
-        GUI.Label(new Rect(x, y, w, 20f), tqLine, rowStyle); y += 28f;
-
-        GUI.Label(new Rect(x, y, w, 20f), "Wheel forces", rowStyle); y += 22f;
-        GUI.Label(new Rect(x, y, w, 20f), fxLine, rowStyle); y += 22f;
-        GUI.Label(new Rect(x, y, w, 20f), fyLine, rowStyle); y += 22f;
-
-        if (_handbrakePressed)
-        {
-            var warnStyle = new GUIStyle(rowStyle)
+            GUIStyle warningStyle = new GUIStyle(textStyle)
             {
                 fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(1f, 0.35f, 0.35f, 1f) }
+                normal = { textColor = Color.red }
             };
-            GUI.Label(new Rect(x, panel.yMax - 30f, w, 22f), "HANDBRAKE ON", warnStyle);
+            GUI.Label(new Rect(x, panel.yMax - 25f, width, 22f), "РУЧНОЙ ТОРМОЗ АКТИВЕН", warningStyle);
         }
     }
 }

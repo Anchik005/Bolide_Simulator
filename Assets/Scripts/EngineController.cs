@@ -2,93 +2,94 @@ using UnityEngine;
 
 public class EngineController : MonoBehaviour
 {
-    [Header("Import parametrs")]
-    [SerializeField] private bool _import = false;
-    [SerializeField] private KartConfig _kartConfig;
+    // Настройки из файла
+    [SerializeField] private bool loadFromConfig = false;
+    [SerializeField] private KartConfig configuration;
 
-    [Header("RPM settings")]
-    [SerializeField] private float _idleRpm = 500f;
-    [SerializeField] private float _maxRpm = 6000f;
-    [SerializeField] private float _revLimiterRpm = 5000f;
+    // Обороты
+    [SerializeField] private float minRpm = 500f;
+    [SerializeField] private float maxRpm = 6000f;
+    [SerializeField] private float limiterRpm = 5000f;
 
-    [Header("Torque curve")]
-    [SerializeField] private AnimationCurve _torqueCurve;
+    // Кривая момента
+    [SerializeField] private AnimationCurve torqueCharacteristic;
 
-    [Header("Inertia & response")]
-    [SerializeField] private float _flywheelInertia = 0.2f;
-    [SerializeField] private float _throttleResponse = 5f;
+    // Динамика
+    [SerializeField] private float inertia = 0.2f;
+    [SerializeField] private float throttleSensitivity = 5f;
 
-    [Header("Losses & load")]
-    [SerializeField] private float _engineFrictionCoeff = 0.02f;
-    [SerializeField] private float _loadTorqueCoeff = 5f;
+    // Потери
+    [SerializeField] private float frictionFactor = 0.02f;
+    [SerializeField] private float loadFactor = 5f;
 
+    // Текущие значения
     public float CurrentRpm { get; private set; }
     public float CurrentTorque { get; private set; }
-    public float SmoothedThrottle { get; private set; }
-    public float RevLimiterFactor { get; private set; } = 1f;
+    public float FilteredThrottle { get; private set; }
+    public float LimiterEffect { get; private set; } = 1f;
 
-    private float _invInertiaFactor;
+    private float inertiaFactor;
 
     private void Awake()
     {
-        if (_import)
-            Initialize();
+        if (loadFromConfig)
+            SetupFromConfig();
 
-        CurrentRpm = _idleRpm;
-        _invInertiaFactor = 60f / (2f * Mathf.PI * Mathf.Max(_flywheelInertia, 0.0001f));
+        CurrentRpm = minRpm;
+        inertiaFactor = 60f / (2f * Mathf.PI * Mathf.Max(inertia, 0.0001f));
     }
 
-    private void Initialize()
+    private void SetupFromConfig()
     {
-        if (_kartConfig != null)
+        if (configuration != null)
         {
-            _torqueCurve = _kartConfig.engineTorqueCurve;
-            _invInertiaFactor = _kartConfig.engineInertia;
-            _maxRpm = _kartConfig.maxRpm;
+            torqueCharacteristic = configuration.engineTorqueCurve;
+            inertiaFactor = configuration.engineInertia;
+            maxRpm = configuration.maxRpm;
         }
     }
 
-    public float Simulate(float throttleInput, float forwardSpeed, float deltaTime)
+    public float Simulate(float throttleInput, float speed, float deltaTime)
     {
-        float target = Mathf.Clamp01(throttleInput);
-        SmoothedThrottle = Mathf.MoveTowards(SmoothedThrottle, target, _throttleResponse * deltaTime);
+        float targetThrottle = Mathf.Clamp01(throttleInput);
+        FilteredThrottle = Mathf.MoveTowards(FilteredThrottle, targetThrottle, throttleSensitivity * deltaTime);
 
-        UpdateRevLimiterFactor();
+        UpdateLimiter();
 
-        float peakTorque = _torqueCurve.Evaluate(CurrentRpm);
-        float effectiveThrottle = SmoothedThrottle * RevLimiterFactor;
+        float maxTorque = torqueCharacteristic.Evaluate(CurrentRpm);
+        float effectiveThrottle = FilteredThrottle * LimiterEffect;
 
-        float driveTorque = peakTorque * effectiveThrottle;
-        float frictionTorque = _engineFrictionCoeff * CurrentRpm;
-        float loadTorque = _loadTorqueCoeff * Mathf.Abs(forwardSpeed);
+        float driveTorque = maxTorque * effectiveThrottle;
+        float frictionTorque = frictionFactor * CurrentRpm;
+        float loadTorque = loadFactor * Mathf.Abs(speed);
 
-        float net = driveTorque - frictionTorque - loadTorque;
+        float netTorque = driveTorque - frictionTorque - loadTorque;
 
-        float rpmDot = net * _invInertiaFactor;
-        CurrentRpm += rpmDot * deltaTime;
+        float rpmChange = netTorque * inertiaFactor;
+        CurrentRpm += rpmChange * deltaTime;
 
-        if (CurrentRpm < _idleRpm) CurrentRpm = _idleRpm;
-        if (CurrentRpm > _maxRpm) CurrentRpm = _maxRpm;
+        if (CurrentRpm < minRpm) CurrentRpm = minRpm;
+        if (CurrentRpm > maxRpm) CurrentRpm = maxRpm;
 
         CurrentTorque = driveTorque;
         return CurrentTorque;
     }
 
-    private void UpdateRevLimiterFactor()
+    private void UpdateLimiter()
     {
-        if (CurrentRpm <= _revLimiterRpm)
+        if (CurrentRpm <= limiterRpm)
         {
-            RevLimiterFactor = 1f;
+            LimiterEffect = 1f;
             return;
         }
 
-        if (CurrentRpm >= _maxRpm)
+        if (CurrentRpm >= maxRpm)
         {
-            RevLimiterFactor = 0f;
+            LimiterEffect = 0f;
             return;
         }
 
-        float t = (CurrentRpm - _revLimiterRpm) / (_maxRpm - _revLimiterRpm);
-        RevLimiterFactor = 1f - t;
+        float t = (CurrentRpm - limiterRpm) / (maxRpm - limiterRpm);
+        LimiterEffect = 1f - t;
     }
 }

@@ -2451,18 +2451,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36fe02f597c024a45abe7b370f1d4cb6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  fl: {fileID: 8400715331703486407}
-  fr: {fileID: 5554731690621522423}
-  rl: {fileID: 4592451829696092395}
-  rr: {fileID: 4637172421093930952}
-  restLength: 0.4
-  springTravel: 0.2
-  springStiffness: 2000
-  damperStiffness: 350
-  wheelRadius: 0.3
-  frontAntiRollStiffness: 800
-  rearAntiRollStiffness: 600
-  showTelemetry: 1
+  suspensionFL: {fileID: 8400715331703486407}
+  suspensionFR: {fileID: 5554731690621522423}
+  suspensionRL: {fileID: 4592451829696092395}
+  suspensionRR: {fileID: 4637172421093930952}
+  neutralLength: 0.4
+  suspensionRange: 0.2
+  springHardness: 2000
+  dampingCoefficient: 350
+  tireSize: 0.3
+  frontStabilizer: 800
+  rearStabilizer: 600
+  displayInfo: 1
 --- !u!114 &8425568702802790838
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2475,26 +2475,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb2d639d4c3d3b74982ad3448151f265, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _import: 1
-  _kartConfig: {fileID: 11400000, guid: 651d931da9510944c935041750f9d252, type: 2}
-  _frontLeftWheel: {fileID: 8400715331703486407}
-  _frontRightWheel: {fileID: 5554731690621522423}
-  _rearLeftWheel: {fileID: 4592451829696092395}
-  _rearRightWheel: {fileID: 4637172421093930952}
-  _playerInput: {fileID: -944628639613478452, guid: e1faec2544055684fabb0e9867f35077, type: 3}
-  _frontAxisShare: 0.5
-  _engine: {fileID: 8425568702802790839}
-  _gearRatio: 8
-  _drivetrainEfficiency: 0.9
-  handbrakeKey: 32
-  handbrakeBrakeForce: 600
-  engineTorque: 400
-  wheelRadius: 0.3
-  maxSpeed: 20
-  maxSteeringAngle: 60
-  frictionCoefficient: 1
-  lateralStiffnes: 80
-  rollingResistance: 0.07
+  useConfigFile: 1
+  kartSettings: {fileID: 11400000, guid: 651d931da9510944c935041750f9d252, type: 2}
+  frontLeft: {fileID: 8400715331703486407}
+  frontRight: {fileID: 5554731690621522423}
+  rearLeft: {fileID: 4592451829696092395}
+  rearRight: {fileID: 4637172421093930952}
+  inputActions: {fileID: -944628639613478452, guid: e1faec2544055684fabb0e9867f35077, type: 3}
+  frontWeightRatio: 0.5
+  motor: {fileID: 8425568702802790839}
+  gearMultiplier: 8
+  transmissionEfficiency: 0.9
+  handbrakeButton: 32
+  handbrakeStrength: 600
+  motorTorque: 400
+  tireRadius: 0.3
+  velocityLimit: 20
+  maxTurnAngle: 60
+  gripCoefficient: 1
+  sideStiffness: 80
+  rollingDrag: 0.07
 --- !u!114 &8425568702802790839
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2507,21 +2507,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c4ab16ecdf55e474d9a82aa94d6dcae7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _import: 1
-  _kartConfig: {fileID: 11400000, guid: 651d931da9510944c935041750f9d252, type: 2}
-  _idleRpm: 500
-  _maxRpm: 6000
-  _revLimiterRpm: 5000
-  _torqueCurve:
+  loadFromConfig: 1
+  configuration: {fileID: 11400000, guid: 651d931da9510944c935041750f9d252, type: 2}
+  minRpm: 500
+  maxRpm: 6000
+  limiterRpm: 5000
+  torqueCharacteristic:
     serializedVersion: 2
     m_Curve: []
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  _flywheelInertia: 0.2
-  _throttleResponse: 5
-  _engineFrictionCoeff: 0.02
-  _loadTorqueCoeff: 5
+  inertia: 0.2
+  throttleSensitivity: 5
+  frictionFactor: 0.02
+  loadFactor: 5
 --- !u!114 &8425568702802790840
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2536,13 +2536,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   airDensity: 1.225
   dragCoefficient: 0.9
-  frontalArea: 0.6
-  rearWing: {fileID: 2326740792051793785}
-  wingArea: 0.4
-  liftCoefficientSlope: 0.05
-  wingAngleDeg: 10
-  groundEffectStrength: 300
-  groundRayLength: 1
+  crossSection: 0.6
+  wingPosition: {fileID: 2326740792051793785}
+  wingSize: 0.4
+  liftCoefficient: 0.05
+  attackAngle: 10
+  groundEffect: 300
+  groundCheckDistance: 1
 --- !u!1 &8788350079647693715
 GameObject:
   m_ObjectHideFlags: 0

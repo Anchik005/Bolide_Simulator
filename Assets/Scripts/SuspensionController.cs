@@ -1,187 +1,148 @@
-using System;
 using UnityEngine;
 
 public class SuspensionController : MonoBehaviour
 {
-    [Header("Suspension Points")]
-    [SerializeField] private Transform fl; // Переднее левое крепление подвески
-    [SerializeField] private Transform fr; // Переднее правое
-    [SerializeField] private Transform rl; // Заднее левое
-    [SerializeField] private Transform rr; // Заднее правое
+    // Точки подвески
+    [SerializeField] private Transform suspensionFL;
+    [SerializeField] private Transform suspensionFR;
+    [SerializeField] private Transform suspensionRL;
+    [SerializeField] private Transform suspensionRR;
 
-    [Header("Suspension Settings")]
-    [SerializeField] private float restLength = 0.4f;
-    // Нормальная (не нагруженная) длина подвески — расстояние до колеса в покое.
-    [SerializeField] private float springTravel = 0.2f;
-    // Максимальное сжатие подвески: ход пружины.
-    [SerializeField] private float springStiffness = 2000f;
-    // Жёсткость пружины k (N/m). Чем выше — тем жестче подвеска.
-    [SerializeField] private float damperStiffness = 350f;
-    // Коэффициент демпфера: сопротивление скорости сжатия/расширения.
-    [SerializeField] private float wheelRadius = 0.3f;
-    // Радиус колеса — нужен чтобы понять, где именно оно “касается” дороги.
+    // Настройки подвески
+    [SerializeField] private float neutralLength = 0.4f;
+    [SerializeField] private float suspensionRange = 0.2f;
+    [SerializeField] private float springHardness = 2000f;
+    [SerializeField] private float dampingCoefficient = 350f;
+    [SerializeField] private float tireSize = 0.3f;
 
-    [Header("Anti-Roll Bar")]
-    [SerializeField] private float frontAntiRollStiffness = 800f; // жёсткость переднего ARB
-    [SerializeField] private float rearAntiRollStiffness = 600f; // жёсткость заднего ARB
+    // Стабилизаторы
+    [SerializeField] private float frontStabilizer = 800f;
+    [SerializeField] private float rearStabilizer = 600f;
 
-    [Header("Telemetry")]
-    [SerializeField] private bool showTelemetry = true;
+    // Диагностика
+    [SerializeField] private bool displayInfo = true;
 
-    private Rigidbody _rb;
+    private Rigidbody physicsBody;
 
-    private float _lastFL;
-    private float _lastFR;
-    private float _lastRL;
-    private float _lastRR;
+    private float flCompression;
+    private float frCompression;
+    private float rlCompression;
+    private float rrCompression;
 
     private void Awake()
     {
-        _rb = GetComponent<Rigidbody>(); // Берём Rigidbody при запуске.
+        physicsBody = GetComponent<Rigidbody>();
     }
 
     private void FixedUpdate()
     {
-        // 1) сначала симулируем подвески - эти методы обновляют last*compression
-        StepWheel(fl, ref _lastFL);
-        StepWheel(fr, ref _lastFR);
-        StepWheel(rl, ref _lastRL);
-        StepWheel(rr, ref _lastRR);
+        UpdateSuspension(suspensionFL, ref flCompression);
+        UpdateSuspension(suspensionFR, ref frCompression);
+        UpdateSuspension(suspensionRL, ref rlCompression);
+        UpdateSuspension(suspensionRR, ref rrCompression);
 
-        // 2) затем применяем анти-ролл силы, используя уже вычисленные compression
-        ApplyAntiRoll();
+        ApplyStabilizerForces();
     }
 
-    private void ApplyAntiRoll()
+    private void ApplyStabilizerForces()
     {
-        // Передняя ось
-        float frontDiff = _lastFL - _lastFR;
-        float frontForce = frontDiff * frontAntiRollStiffness;
+        float frontDifference = flCompression - frCompression;
+        float frontStabilizerForce = frontDifference * frontStabilizer;
 
-        // логика: если сжатие > 0 — колесо в контакте (можно сделать флаг touched, если есть)
-        if (_lastFL > -0.0001f) // простая проверка контакта
-            _rb.AddForceAtPosition(-transform.up * frontForce, fl.position, ForceMode.Force);
+        if (flCompression > -0.0001f)
+            physicsBody.AddForceAtPosition(-transform.up * frontStabilizerForce, suspensionFL.position, ForceMode.Force);
 
-        if (_lastFR > -0.0001f)
-            _rb.AddForceAtPosition(transform.up * frontForce, fr.position, ForceMode.Force);
+        if (frCompression > -0.0001f)
+            physicsBody.AddForceAtPosition(transform.up * frontStabilizerForce, suspensionFR.position, ForceMode.Force);
 
-        // Задняя ось
-        float rearDiff = _lastRL - _lastRR;
-        float rearForce = rearDiff * rearAntiRollStiffness;
+        float rearDifference = rlCompression - rrCompression;
+        float rearStabilizerForce = rearDifference * rearStabilizer;
 
-        if (_lastRL > -0.0001f)
-            _rb.AddForceAtPosition(-transform.up * rearForce, rl.position, ForceMode.Force);
+        if (rlCompression > -0.0001f)
+            physicsBody.AddForceAtPosition(-transform.up * rearStabilizerForce, suspensionRL.position, ForceMode.Force);
 
-        if (_lastRR > -0.0001f)
-            _rb.AddForceAtPosition(transform.up * rearForce, rr.position, ForceMode.Force);
+        if (rrCompression > -0.0001f)
+            physicsBody.AddForceAtPosition(transform.up * rearStabilizerForce, suspensionRR.position, ForceMode.Force);
     }
 
-    private void StepWheel(Transform pivot, ref float lastCompression)
+    private void UpdateSuspension(Transform mountPoint, ref float compression)
     {
-        Vector3 origin = pivot.position;
-        Vector3 dir = -pivot.up;
+        Vector3 startPoint = mountPoint.position;
+        Vector3 direction = -mountPoint.up;
 
-        float maxDist = restLength + springTravel + wheelRadius;
-        if (!Physics.Raycast(origin, dir, out RaycastHit hit, maxDist))
+        float maxDistance = neutralLength + suspensionRange + tireSize;
+        if (!Physics.Raycast(startPoint, direction, out RaycastHit contact, maxDistance))
             return;
 
-        float currentLen = hit.distance - wheelRadius;
+        float currentLength = contact.distance - tireSize;
+        currentLength = Mathf.Clamp(currentLength, neutralLength - suspensionRange, neutralLength + suspensionRange);
 
-        // Ограничение хода подвески
-        currentLen = Mathf.Clamp(currentLen, restLength - springTravel, restLength + springTravel);
+        float compressionValue = neutralLength - currentLength;
+        float springForce = compressionValue * springHardness;
 
-        // Сжатие пружины (x = Lrest - Lcurrent)
-        float compression = restLength - currentLen;
+        float compressionSpeed = (compressionValue - compression) / Time.fixedDeltaTime;
+        float dampingForce = compressionSpeed * dampingCoefficient;
 
-        // Сила пружины: F = k * x
-        float springForce = compression * springStiffness;
+        compression = compressionValue;
 
-        // Скорость сжатия (v)
-        float compVel = (compression - lastCompression) / Time.fixedDeltaTime;
+        float totalForce = springForce + dampingForce;
+        Vector3 forceVector = mountPoint.up * totalForce;
 
-        // Сила демпфера: F = c * v
-        float damperForce = compVel * damperStiffness;
-
-        lastCompression = compression;
-
-        float total = springForce + damperForce;
-
-        // Направление силы вверх по оси подвески
-        Vector3 force = pivot.up * total;
-
-        // Применение силы создаёт вертикальные колебания и крен
-        _rb.AddForceAtPosition(force, pivot.position, ForceMode.Force);
+        physicsBody.AddForceAtPosition(forceVector, mountPoint.position, ForceMode.Force);
     }
 
     private void OnGUI()
     {
-        if (!showTelemetry) return;
-        if (_rb == null) return;
+        if (!displayInfo) return;
+        if (physicsBody == null) return;
 
-        var box = new Rect(12f, 290f, 420f, 170f);
+        Rect displayBox = new Rect(20f, 280f, 400f, 160f);
 
-        Color prev = GUI.color;
-        GUI.color = new Color(0f, 0f, 0f, 0.45f);
-        GUI.Box(box, GUIContent.none);
-        GUI.color = prev;
+        GUI.color = new Color(0.1f, 0.1f, 0.1f, 0.6f);
+        GUI.Box(displayBox, "");
+        GUI.color = Color.white;
 
-        var s = new GUIStyle(GUI.skin.label)
+        GUIStyle style = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 14,
-            normal = { textColor = Color.white }
+            fontSize = 13,
+            normal = { textColor = Color.cyan }
         };
 
-        float x = box.x + 12f;
-        float y = box.y + 10f;
-        float w = box.width - 24f;
+        float x = displayBox.x + 12f;
+        float y = displayBox.y + 10f;
+        float w = displayBox.width - 24f;
 
-        float speedMs = _rb.linearVelocity.magnitude;
-        float speedKmh = speedMs * 3.6f;
+        float speed = physicsBody.linearVelocity.magnitude;
+        float speedKmh = speed * 3.6f;
 
-        // Анти-ролл: то же, что в ApplyAntiRoll(), только для вывода
-        float frontDiff = _lastFL - _lastFR;
-        float frontForce = frontDiff * frontAntiRollStiffness;
+        float frontDiff = flCompression - frCompression;
+        float frontStabForce = frontDiff * frontStabilizer;
+        float rearDiff = rlCompression - rrCompression;
+        float rearStabForce = rearDiff * rearStabilizer;
 
-        float rearDiff = _lastRL - _lastRR;
-        float rearForce = rearDiff * rearAntiRollStiffness;
+        float flSpring = flCompression * springHardness;
+        float frSpring = frCompression * springHardness;
+        float rlSpring = rlCompression * springHardness;
+        float rrSpring = rrCompression * springHardness;
 
-        // Восстанавливаем spring/damper из уже имеющихся lastCompression (и параметров)
-        // lastCompression == compression на текущем шаге.
-        float dt = Time.fixedDeltaTime;
-
-        // Чтобы получить compVel без хранения прошлого значения:
-        // compVel = (compression - prevCompression) / dt  =>  prevCompression = compression - compVel*dt
-        // Но compVel мы тоже не храним, поэтому считаем "как будто" compVel=0 для вывода демпфера нельзя.
-        // Выход: оценить compVel через то, что SpringForce/total мы не храним — значит честнее выводить только springForce (статическую часть) + compression.
-        // Если нужен damper тоже — придётся хранить хотя бы прошлую compression отдельно (это уже новая переменная).
-        float flCompression = _lastFL;
-        float frCompression = _lastFR;
-        float rlCompression = _lastRL;
-        float rrCompression = _lastRR;
-
-        float flSpring = flCompression * springStiffness;
-        float frSpring = frCompression * springStiffness;
-        float rlSpring = rlCompression * springStiffness;
-        float rrSpring = rrCompression * springStiffness;
-
-        GUI.Label(new Rect(x, y, w, 18f), "SUSPENSION TELEMETRY", s); y += 20f;
+        GUI.Label(new Rect(x, y, w, 18f), "Телеметрия подвески", style); y += 20f;
 
         GUI.Label(new Rect(x, y, w, 18f),
-            $"Speed: {speedMs:0.0} m/s ({speedKmh:0.0} km/h)", s); y += 18f;
+            $"Скорость: {speed:0.0} м/с ({speedKmh:0.0} км/ч)", style); y += 18f;
 
         GUI.Label(new Rect(x, y, w, 18f),
-            $"ARB front: {frontForce:0} N | rear: {rearForce:0} N", s); y += 18f;
+            $"Стаб. перед: {frontStabForce:0} Н | зад: {rearStabForce:0} Н", style); y += 18f;
 
         GUI.Label(new Rect(x, y, w, 18f),
-            $"FL comp: {flCompression:0.000} m | Spring: {flSpring:0} N", s); y += 18f;
+            $"ПЛ сжатие: {flCompression:0.000} м | Сила: {flSpring:0} Н", style); y += 18f;
 
         GUI.Label(new Rect(x, y, w, 18f),
-            $"FR comp: {frCompression:0.000} m | Spring: {frSpring:0} N", s); y += 18f;
+            $"ПП сжатие: {frCompression:0.000} м | Сила: {frSpring:0} Н", style); y += 18f;
 
         GUI.Label(new Rect(x, y, w, 18f),
-            $"RL comp: {rlCompression:0.000} m | Spring: {rlSpring:0} N", s); y += 18f;
+            $"ЗЛ сжатие: {rlCompression:0.000} м | Сила: {rlSpring:0} Н", style); y += 18f;
 
         GUI.Label(new Rect(x, y, w, 18f),
-            $"RR comp: {rrCompression:0.000} m | Spring: {rrSpring:0} N", s);
+            $"ЗП сжатие: {rrCompression:0.000} м | Сила: {rrSpring:0} Н", style);
     }
 }
